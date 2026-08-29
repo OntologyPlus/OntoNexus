@@ -1,0 +1,86 @@
+- id: hard_rules_truncated_refuses
+  type: hard_rule_refuse
+  query: 诊断达成率
+
+- id: gateway_blocks_missing_object_id
+  type: gateway_block_no_object
+
+- id: gateway_sod_same_user
+  type: gateway_sod
+
+- id: skill_lookup_intent
+  type: skill_registry
+  query: 查找哪些医生对象
+  expected_skill: ontology_lookup
+
+- id: skill_diagnosis_intent
+  type: skill_registry
+  query: 请诊断达成率异常
+  expected_skill: metric_diagnosis
+
+- id: skill_causal_intent
+  type: skill_registry
+  query: 为什么处方量下降，给出因果链
+  expected_skill: causal_explainer
+
+- id: skill_recovery_intent
+  type: skill_registry
+  query: 生成流失挽回整改计划
+  expected_skill: recovery_plan_drafter
+
+- id: skill_report_intent
+  type: skill_registry
+  query: 写一份经营分析报告
+  expected_skill: report_narrator
+
+- id: skill_action_intent
+  type: skill_registry
+  query: 执行拜访动作并提交审批
+  expected_skill: action_operator
+
+- id: hallucination_numeric_tolerance
+  type: hallucination_numeric
+  content: 达成率达到 10
+  expect_pass: false
+
+- id: orchestrate_lookup
+  type: orchestrate
+  query: 查找医生对象
+  expected_skill: ontology_lookup
+  must_not_execute: true
+
+- id: orchestrate_diagnosis
+  type: orchestrate
+  query: 诊断指标异常和下滑
+  expected_skill: metric_diagnosis
+  must_not_execute: true
+
+- id: orchestrate_causal
+  type: orchestrate
+  query: 给出因果影响链
+  expected_skill: causal_explainer
+  must_not_execute: true
+
+- id: oag_min_objects
+  type: oag_objects
+  query: 医院
+  min_objects: 0
+
+- id: orchestrate_no_high_risk_direct_execute
+  type: orchestrate
+  query: 执行合规风险标记
+  expected_skill: action_operator
+  must_not_execute: true
+
+- id: skill_loader_has_six
+  type: skill_registry
+  query: 随便查一下对象
+  expected_skill: ontology_lookup
+
+- id: gateway_hr001_again
+  type: gateway_block_no_object
+
+- id: hallucation_ok_anchor
+  type: hallucination_numeric
+  content: 对象 d1 达成率 80
+  expect_pass: true

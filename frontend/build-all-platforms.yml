@@ -1,0 +1,251 @@
+name: Build All Platforms
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+# 取消同一 PR 或分支的正在运行的工作流
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # macOS Universal 构建（Intel + Apple Silicon）
+  build-macos-universal:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Tauri CLI
+        working-directory: frontend
+        run: npm install --save-dev @tauri-apps/cli @tauri-apps/api
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Tauri for x86_64
+        working-directory: frontend
+        run: npx tauri build --target x86_64-apple-darwin
+
+      - name: Build Tauri for aarch64
+        working-directory: frontend
+        run: npx tauri build --target aarch64-apple-darwin
+
+      - name: Create Universal Binary
+        working-directory: frontend
+        run: |
+          # 复制 Intel 版本作为基础
+          cp -r src-tauri/target/x86_64-apple-darwin/release/bundle/macos/OntoNexus.app \
+                OntoNexus-Uni versal.app
+          
+          # 合并两种架构
+          lipo -create \
+            src-tauri/target/x86_64-apple-darwin/release/OntoNexus \
+            src-tauri/target/aarch64-apple-darwin/release/OntoNexus \
+            -output OntoNexus-Universal.app/Contents/MacOS/OntoNexus
+          
+          # 验证
+          echo "Universal Binary 架构信息:"
+          lipo -info OntoNexus-Universal.app/Contents/MacOS/OntoNexus
+
+      - name: Create DMG for Universal
+        working-directory: frontend
+        run: |
+          # 使用 create-dmg 工具（如果可用）
+          # 或者手动创建简单的 DMG
+          hdiutil create -volname "OntoNexus" -srcfolder "OntoNexus-Universal.app" -ov -format UDZO OntoNexus-macOS-Uni versal.dmg
+
+      - name: Upload macOS Universal App
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-macOS-Universal-App
+          path: frontend/OntoNexus-Universal.app
+
+      - name: Upload macOS Universal DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-macOS-Universal-DMG
+          path: frontend/OntoNexus-macOS-Universal.dmg
+
+  # Windows 构建
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Tauri CLI
+        working-directory: frontend
+        run: npm install --save-dev @tauri-apps/cli @tauri-apps/api
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Tauri App
+        working-directory: frontend
+        run: npx tauri build
+
+      - name: Upload Windows Installer (NSIS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-Windows-Installer
+          path: frontend/src-tauri/target/release/bundle/nsis/OntoNexus_*_x64-setup.exe
+
+      - name: Upload Windows Portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-Windows-Portable
+          path: frontend/src-tauri/target/release/OntoNexus.exe
+
+  # Ubuntu 构建
+  build-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libavutil-dev \
+            libswresample-dev \
+            libavcodec-dev \
+            libavfilter-dev \
+            libavformat-dev \
+            libclang-dev \
+            llvm-dev \
+            libxcb-render0-dev \
+            libxcb-shape0-dev \
+            libxcb-fixes-dev \
+            pkg-config \
+            libxdo-dev
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Tauri CLI
+        working-directory: frontend
+        run: npm install --save-dev @tauri-apps/cli @tauri-apps/api
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Tauri App
+        working-directory: frontend
+        run: npx tauri build
+
+      - name: Upload Debian Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-Ubuntu-DEB
+          path: frontend/src-tauri/target/release/bundle/deb/ontonexus_*.deb
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: OntoNexus-Linux-AppImage
+          path: frontend/src-tauri/target/release/bundle/appimage/OntoNexus_*.AppImage
+
+  # 创建 GitHub Release（仅当推送 tag 时）
+  create-release:
+    needs: [build-macos-universal, build-windows, build-ubuntu]
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 10
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          cd artifacts
+          echo "准备发布文件..."
+          find . -type f -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" | head -20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/OntoNexus-macOS-Universal-DMG/*
+            artifacts/**/OntoNexus-Windows-Installer/*
+            artifacts/**/OntoNexus-Windows-Portable/*
+            artifacts/**/OntoNexus-Ubuntu-DEB/*
+            artifacts/**/OntoNexus-Linux-AppImage/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
