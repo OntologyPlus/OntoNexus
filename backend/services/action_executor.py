@@ -82,8 +82,6 @@ class ActionExecutor:
             )
             self.db.add(log)
 
-            self.db.commit()
-
             return {
                 "success": True,
                 "execution_id": execution_id,
@@ -91,7 +89,6 @@ class ActionExecutor:
                 "side_effects": side_effects_results,
             }
         except Exception as e:
-            self.db.rollback()
             log = ExecutionLog(
                 id=execution_id,
                 action_name=action_name,
@@ -102,7 +99,6 @@ class ActionExecutor:
                 user_id=user_id,
             )
             self.db.add(log)
-            self.db.commit()
             return {"success": False, "error": str(e), "execution_id": execution_id}
 
     def _evaluate_preconditions(self, obj: OntologyObject, preconditions_str: str, params: Dict) -> Tuple[bool, str]:

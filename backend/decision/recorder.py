@@ -43,6 +43,7 @@ class DecisionRecorder:
         metadata: Optional[Dict[str, Any]] = None,
         force_blocked: bool = False,
         refuse_reason: Optional[str] = None,
+        case_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload = {
             "category": category,
@@ -81,6 +82,7 @@ class DecisionRecorder:
             parent_decision_id=parent_decision_id,
             entity_ids=_dumps(entity_ids or []),
             metadata_json=_dumps(metadata or {}),
+            case_id=case_id,
         )
         self.db.add(rec)
         self.db.flush()
@@ -163,5 +165,6 @@ class DecisionRecorder:
             "parentDecisionId": rec.parent_decision_id,
             "entityIds": _loads(rec.entity_ids, []),
             "metadata": _loads(rec.metadata_json, {}),
+            "caseId": rec.case_id,
             "createdAt": rec.created_at.isoformat() if rec.created_at else None,
         }

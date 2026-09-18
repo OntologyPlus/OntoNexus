@@ -76,11 +76,16 @@ def _human_effects(raw: Optional[str]) -> List[str]:
     return out
 
 
-def _build_loop(db: Session, user: User, pending: List[Dict[str, Any]], decisions: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_loop(
+    db: Session,
+    user: User,
+    pending: List[Dict[str, Any]],
+    decisions: List[Dict[str, Any]],
+    focal_id: Optional[str],
+) -> Dict[str, Any]:
     from models.action import ActionProposal
 
     uid = getattr(user, "id", None) or "system"
-    focal_id = "d1"
     case = next(
         (a for a in pending if a.get("entity_id") == focal_id or a.get("entityId") == focal_id),
         None,
@@ -99,7 +104,7 @@ def _build_loop(db: Session, user: User, pending: List[Dict[str, Any]], decision
         from semantic.pipeline import peek_activation
 
         pack = peek_activation(db, "预警诊断", user=user)
-        if pack:
+        if pack and focal_id:
             facts = facts_about(pack.get("derived_facts") or [], focal_id)[:6]
     except Exception:
         facts = []
@@ -202,13 +207,33 @@ def build_overview(db: Session, user: User) -> Dict[str, Any]:
             }
         )
 
-    focal = db.query(OntologyObject).filter(OntologyObject.id == "d1").first()
+    # Prefer a real critical signal, then a warning, then the object attached to the
+    # most relevant action. This keeps the executive hub meaningful with any demo data.
+    focal = (
+        db.query(OntologyObject)
+        .filter(OntologyObject.status == "critical")
+        .order_by(OntologyObject.updated_at.desc())
+        .first()
+    )
+    if not focal:
+        focal = (
+            db.query(OntologyObject)
+            .filter(OntologyObject.status == "warning")
+            .order_by(OntologyObject.updated_at.desc())
+            .first()
+        )
+    if not focal:
+        action_object_id = next((a.get("entity_id") or a.get("entityId") for a in pending if a.get("entity_id") or a.get("entityId")), None)
+        if action_object_id:
+            focal = db.query(OntologyObject).filter(OntologyObject.id == action_object_id).first()
+    if not focal:
+        focal = db.query(OntologyObject).order_by(OntologyObject.updated_at.desc()).first()
     sales_signals = compute_sales_signals(db, focal) if focal else {}
 
     from decision.learning import EVALUATE_AFTER_HOURS, list_pending_outcomes, list_scored_outcomes
 
     pending_learn = list_pending_outcomes(db)
-    loop = _build_loop(db, user, pending, decisions)
+    loop = _build_loop(db, user, pending, decisions, getattr(focal, "id", None))
 
     return {
         "user": {
@@ -224,7 +249,7 @@ def build_overview(db: Session, user: User) -> Dict[str, Any]:
         "skill_weights": get_weights(db),
         "latest_attribution": latest_attribution,
         "sales_signals": sales_signals,
-        "focal_object": {"id": "d1", "name": getattr(focal, "name", None)} if focal else None,
+        "focal_object": {"id": focal.id, "name": getattr(focal, "name", None), "status": focal.status} if focal else None,
         "learning": {
             "evaluate_after_hours": EVALUATE_AFTER_HOURS,
             "pending": pending_learn,

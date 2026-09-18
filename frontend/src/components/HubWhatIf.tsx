@@ -1,15 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Target } from 'lucide-react';
 import PageHeader from './PageHeader';
 import apiClient, { notifyHubChanged } from '../api/client';
 import { DataCards, WorkbenchDataCard } from './ChatWorkbenchCards';
 import { COPY, stripSystemJargon } from '../copy';
 import { useHubOverview } from '../hooks/useHubOverview';
-
-const OBJECTS = [
-  { id: 'd1', label: '张主任' },
-  { id: 't1', label: '华东销售目标' },
-];
 
 function riskLabel(risk?: string) {
   if (risk === 'critical') return '高';
@@ -20,11 +15,22 @@ function riskLabel(risk?: string) {
 
 const HubWhatIf: React.FC = () => {
   const { overview } = useHubOverview();
-  const [objectId, setObjectId] = useState('d1');
+  const objects = useMemo(() => {
+    const candidates = [overview?.focal_object, ...(overview?.alerts || [])]
+      .filter((item: any) => item?.id)
+      .map((item: any) => ({ id: item.id, label: item.name || item.title || item.id }));
+    return candidates.filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index);
+  }, [overview]);
+  const [objectId, setObjectId] = useState('');
   const [query, setQuery] = useState('如果覆盖提升会怎样');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<any>(null);
+
+  useEffect(() => {
+    if (!objects.length) return;
+    if (!objects.some((item) => item.id === objectId)) setObjectId(objects[0].id);
+  }, [objectId, objects]);
 
   const run = async () => {
     setLoading(true);
@@ -61,7 +67,7 @@ const HubWhatIf: React.FC = () => {
             value={objectId}
             onChange={(e) => setObjectId(e.target.value)}
           >
-            {OBJECTS.map((o) => (
+            {objects.map((o) => (
               <option key={o.id} value={o.id}>{o.label}</option>
             ))}
           </select>
@@ -74,7 +80,7 @@ const HubWhatIf: React.FC = () => {
           <button
             type="button"
             onClick={run}
-            disabled={loading}
+            disabled={loading || !objectId}
             className="px-4 py-2 rounded-xl bg-brand-500 text-white text-sm disabled:opacity-50"
           >
             {loading ? COPY.whatIf.running : COPY.whatIf.run}

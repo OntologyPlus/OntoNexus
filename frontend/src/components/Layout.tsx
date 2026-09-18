@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useEffect, useMemo } from 'react';
-import { Settings, Bell, Network, X, CheckCircle, AlertTriangle, Info, Lightbulb, MessageSquare, LogOut, HelpCircle, ChevronDown, ChevronRight, Sparkles, Brain, Target, Inbox, Clock, FileText, BadgeCheck, Shield, PenLine } from 'lucide-react';
+import { Settings, Bell, Network, X, CheckCircle, AlertTriangle, Info, Lightbulb, MessageSquare, LogOut, HelpCircle, ChevronDown, ChevronRight, Sparkles, Brain, Target, Inbox, Clock, FileText, ClipboardList, BadgeCheck, Shield, PenLine } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOntologyContext } from '../contexts/OntologyContext';
@@ -86,6 +86,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, onNav
       label: COPY.nav.groups.decide,
       children: [
         { tab: 'brief', label: COPY.nav.brief, icon: <FileText size={16} /> },
+        { tab: 'cases', label: '案件驾驶舱', icon: <ClipboardList size={16} /> },
         { tab: 'watch', label: COPY.nav.watch, icon: <AlertTriangle size={16} /> },
         { tab: 'approve', label: COPY.nav.approve, icon: <Inbox size={16} /> },
         { tab: 'chat', label: COPY.nav.ask, icon: <MessageSquare size={16} /> },

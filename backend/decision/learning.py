@@ -200,7 +200,7 @@ def score_from_signals(db: Session, object_id: Optional[str]) -> Dict[str, Any]:
         return {"effectiveness": 0.25, "note": "roi_negative", "signals": signals}
     if obj.status in ("warning", "critical"):
         return {"effectiveness": 0.25, "note": "still_at_risk", "signals": signals}
-    if obj.status == "normal":
+    if obj.status in ("normal", "stable"):
         return {"effectiveness": 0.7, "note": "status_normal", "signals": signals}
     return {"effectiveness": 0.5, "note": "neutral", "signals": signals}
 

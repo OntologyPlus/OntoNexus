@@ -37,6 +37,14 @@ ROLE_PERMISSIONS = {
         "Product": {"can_read": True, "can_write": False, "can_execute": False, "can_admin": False},
         "default": {"can_read": True, "can_write": False, "can_execute": False, "can_admin": False},
     },
+    # rep is the business-facing name used by seeded users and the hub.
+    "rep": {
+        "Doctor": {"can_read": True, "can_write": True, "can_execute": False, "can_admin": False},
+        "Hospital": {"can_read": True, "can_write": True, "can_execute": False, "can_admin": False},
+        "Product": {"can_read": True, "can_write": False, "can_execute": False, "can_admin": False},
+        "SalesRep": {"can_read": True, "can_write": True, "can_execute": False, "can_admin": False},
+        "default": {"can_read": True, "can_write": False, "can_execute": False, "can_admin": False},
+    },
     "agent": {
         "Doctor": {"can_read": True, "can_write": False, "can_execute": True, "can_admin": False},
         "Hospital": {"can_read": True, "can_write": False, "can_execute": True, "can_admin": False},
@@ -55,7 +63,7 @@ def check_permission(db: Session, user: User, object_type: str, object_id: Optio
 
     explicit = db.query(ObjectPermission).filter(
         ObjectPermission.user_id == user.id,
-        ObjectPermission.object_type == object_type,
+        ObjectPermission.object_type.in_([object_type, "*"]),
     ).all()
 
     for perm in explicit:
@@ -99,7 +107,8 @@ def get_readable_object_types(user: User) -> List[str]:
         if perms.get("can_read", False):
             readable.append(obj_type)
 
-    return readable if readable else ["*"]
+    # A default-only role must not accidentally become an unrestricted reader.
+    return readable
 
 
 def check_action_permission(db: Session, user: User, object_type: str, action_requires_approval: bool) -> bool:
@@ -114,3 +123,18 @@ def check_action_permission(db: Session, user: User, object_type: str, action_re
         return False
 
     return True
+
+
+def can_approve_action(db: Session, user: User, object_type: str, risk_level: str = "R2") -> bool:
+    """Approval is a business capability, not merely a valid login."""
+    if user.role == "admin":
+        return True
+    if user.role not in ("manager", "compliance"):
+        return False
+    return check_permission(db, user, object_type or "", None, "can_execute")
+
+
+def can_execute_approved_action(db: Session, user: User, object_type: str) -> bool:
+    if user.role == "admin":
+        return True
+    return user.role in ("manager", "compliance") and check_permission(db, user, object_type or "", None, "can_execute")

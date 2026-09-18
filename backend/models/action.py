@@ -1,10 +1,15 @@
-from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime
+from sqlalchemy import Column, String, Integer, Float, Boolean, Text, DateTime, Index
 from sqlalchemy.sql import func
 from database import Base
 
 
 class ActionProposal(Base):
     __tablename__ = "action_proposals"
+    __table_args__ = (
+        Index("uq_action_idempotency_key", "idempotency_key", unique=True),
+        Index("idx_action_case", "case_id"),
+        Index("idx_action_decision", "decision_id"),
+    )
 
     id = Column(String, primary_key=True)
     title = Column(String, nullable=False)
@@ -37,3 +42,10 @@ class ActionProposal(Base):
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
+    idempotency_key = Column(String, nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+    decision_id = Column(String, nullable=True)
+    case_id = Column(String, nullable=True)
+    causation_id = Column(String, nullable=True)
+    risk_level = Column(String, nullable=True)
+    policy_version = Column(String, nullable=True)

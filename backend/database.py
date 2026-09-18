@@ -219,8 +219,37 @@ def _migrate_schema():
                 _add_column_if_not_exists(conn, "action_proposals", "completed_at", "DATETIME")
             if "error_message" not in existing_columns:
                 _add_column_if_not_exists(conn, "action_proposals", "error_message", "TEXT")
+            if "idempotency_key" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "idempotency_key", "VARCHAR")
+            if "version" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "version", "INTEGER DEFAULT 1")
+            if "decision_id" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "decision_id", "VARCHAR")
+            if "case_id" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "case_id", "VARCHAR")
+            if "causation_id" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "causation_id", "VARCHAR")
+            if "risk_level" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "risk_level", "VARCHAR")
+            if "policy_version" not in existing_columns:
+                _add_column_if_not_exists(conn, "action_proposals", "policy_version", "VARCHAR")
             _create_index_if_not_exists(conn, "idx_action_proposal_status", "action_proposals", "status")
             _create_index_if_not_exists(conn, "idx_action_proposal_entity", "action_proposals", "entity_id")
+            _create_index_if_not_exists(conn, "idx_action_case", "action_proposals", "case_id")
+            _create_index_if_not_exists(conn, "idx_action_decision", "action_proposals", "decision_id")
+
+        if "decision_records" in existing_tables:
+            existing_columns = {col["name"] for col in inspector.get_columns("decision_records")}
+            if "case_id" not in existing_columns:
+                _add_column_if_not_exists(conn, "decision_records", "case_id", "VARCHAR")
+            _create_index_if_not_exists(conn, "idx_decision_case", "decision_records", "case_id")
+
+        if "execution_logs" in existing_tables:
+            existing_columns = {col["name"] for col in inspector.get_columns("execution_logs")}
+            if "case_id" not in existing_columns:
+                _add_column_if_not_exists(conn, "execution_logs", "case_id", "VARCHAR")
+            _create_index_if_not_exists(conn, "idx_execution_case", "execution_logs", "case_id")
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_action_idempotency_key ON action_proposals (idempotency_key) WHERE idempotency_key IS NOT NULL"))
 
         if "doctors" in existing_tables:
             _create_index_if_not_exists(conn, "idx_doctor_influence", "doctors", "influence_score")

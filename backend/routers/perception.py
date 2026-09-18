@@ -201,7 +201,7 @@ def analyze_hospital_perception(db: Session, hospital: Hospital, obj: OntologyOb
     elif risk_score > 0.3:
         state = "warning"
     else:
-        state = "stable"
+        state = "normal"
 
     if not patterns:
         patterns.append({
@@ -343,7 +343,7 @@ def run_perception(
                 "confidence": 0.7
             })
 
-        state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "stable"
+        state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "normal"
 
         results.append(PerceptionResult(
             entity_id=doctor.id,
@@ -483,7 +483,7 @@ def get_entity_perception(
     risk_score += 0.2 if obj.status == "warning" else 0.35 if obj.status == "critical" else 0
     risk_score = max(0, min(risk_score, 1.0))
 
-    state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "stable"
+    state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "normal"
 
     if doctor.influence_score and doctor.influence_score > 70:
         loyalty_score = 0.6 + (doctor.influence_score - 70) / 100
@@ -611,7 +611,7 @@ def get_entity_perception_with_attribution(
     risk_score += 0.2 if obj.status == "warning" else 0.35 if obj.status == "critical" else 0
     risk_score = max(0, min(risk_score, 1.0))
 
-    state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "stable"
+    state = "critical" if risk_score > 0.6 else "warning" if risk_score > 0.3 else "normal"
 
     if doctor.influence_score and doctor.influence_score > 70:
         loyalty_score = 0.6 + (doctor.influence_score - 70) / 100

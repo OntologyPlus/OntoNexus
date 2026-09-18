@@ -79,3 +79,12 @@ def require_auth(
             detail="Not authenticated",
         )
     return user
+
+
+def require_roles(*roles):
+    """FastAPI dependency factory for role-gated governance endpoints."""
+    def dependency(user: User = Depends(require_auth)) -> User:
+        if user.role not in roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+        return user
+    return dependency

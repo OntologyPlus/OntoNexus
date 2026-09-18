@@ -38,8 +38,21 @@ class ActionGateway:
         description: Optional[str] = None,
         causation_id: Optional[str] = None,
         decision_id: Optional[str] = None,
+        case_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         params = params or {}
+        idempotency_key = params.get("idempotency_key") or _idempotency_key(action_type, object_id, params)
+        existing = self.db.query(ActionProposal).filter(ActionProposal.idempotency_key == idempotency_key).first()
+        if existing:
+            return {
+                "success": True,
+                "status": existing.status,
+                "proposal_id": existing.id,
+                "risk_level": existing.risk_level,
+                "proposed_by": existing.proposed_by,
+                "message": "已返回幂等键对应的既有动作提案。",
+                "idempotent": True,
+            }
         source_type = params.get("entity_type") or params.get("objectType")
         if object_id and not source_type:
             from models.ontology import OntologyObject
@@ -76,6 +89,11 @@ class ActionGateway:
             action_definition_name=action_type,
             action_definition_requires_approval=needs_approval,
             action_definition_side_effects=json.dumps(contract.side_effects),
+            idempotency_key=idempotency_key,
+            decision_id=decision_id,
+            case_id=case_id or params.get("case_id"),
+            causation_id=causation_id,
+            risk_level=contract.risk_level,
         )
         if not needs_approval:
             proposal.approved_by = "system"
@@ -108,6 +126,10 @@ class ActionGateway:
         proposal = self.db.query(ActionProposal).filter(ActionProposal.id == proposal_id).first()
         if not proposal:
             raise ActionExecutionError("Action not found")
+        if proposal.status != "pending":
+            if proposal.status in ("approved", "executed", "failed", "rejected"):
+                return {"action_id": proposal.id, "status": proposal.status, "message": "动作已处理，不重复审批。"}
+            raise ActionExecutionError(f"Invalid action status: {proposal.status}")
         try:
             check_sod(proposal.proposed_by, approver_id)
         except SoDViolation as exc:
@@ -131,6 +153,8 @@ class ActionGateway:
         proposal = self.db.query(ActionProposal).filter(ActionProposal.id == proposal_id).first()
         if not proposal:
             raise ActionExecutionError("Action not found")
+        if proposal.status != "pending":
+            return {"action_id": proposal.id, "status": proposal.status, "message": "动作已处理，不重复拒绝。"}
         proposal.status = "rejected"
         proposal.error_message = feedback
         self.db.flush()
@@ -146,6 +170,8 @@ class ActionGateway:
         proposal = self.db.query(ActionProposal).filter(ActionProposal.id == proposal_id).first()
         if not proposal:
             raise ActionExecutionError("Action not found")
+        if proposal.status == "executed":
+            return {"action_id": proposal.id, "status": "executed", "message": "动作已执行，不重复执行。"}
         if proposal.status != "approved":
             raise ActionExecutionError("Action must be approved first")
 
@@ -208,6 +234,7 @@ class ActionGateway:
                 result="executed via gateway",
                 plan_id=proposal.id,
                 user_id=user_id,
+                case_id=proposal.case_id,
             )
             self.db.add(log)
             proposal.completed_at = datetime.now(timezone.utc)

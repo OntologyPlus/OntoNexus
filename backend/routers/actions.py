@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from auth import get_current_user, require_auth
+from auth import require_auth
 from models.user import User
 from schemas.action import ActionApprovalRequest, ActionApprovalResponse
 from services.action_service import get_pending_actions, approve_action, reject_action, execute_action, get_execution_logs
@@ -14,10 +14,9 @@ router = APIRouter(prefix="/api/actions", tags=["actions"])
 def list_pending_actions(
     user_id: str = "default_user",
     db: Session = Depends(get_db),
-    user: Optional = Depends(get_current_user),
+    user: User = Depends(require_auth),
 ):
-    effective_user_id = user.id if user else user_id
-    results = get_pending_actions(db, effective_user_id)
+    results = get_pending_actions(db, user.id)
     return results
 
 

@@ -18,6 +18,9 @@ from models.reminder import Reminder
 from models.agent import AgentStatus
 from models.source_binding import SourceBinding
 from models.learning import SkillOutcome
+from models.case import DecisionCase
+from models.decision import DecisionRecord
+from models.effect import EffectRecord
 from auth import get_password_hash
 from datetime import datetime, timedelta, timezone
 
@@ -686,6 +689,52 @@ def _ensure_demo_loop(db):
     ap1 = db.query(ActionProposal).filter(ActionProposal.id == "ap1").first()
     if ap1 and ap1.status == "pending" and ap1.proposed_by in (None, "InsightAgent"):
         ap1.proposed_by = "user_rep"
+
+    # The executive cockpit needs one coherent, idempotent business story rather
+    # than disconnected demo records.
+    if not db.query(DecisionCase).filter(DecisionCase.id == "case_demo_d1").first():
+        db.add(DecisionCase(
+            id="case_demo_d1",
+            title="张主任处方下滑恢复",
+            description="拜访节奏中断导致处方下滑，需要验证恢复方案并观察效果。",
+            status="open",
+            priority="high",
+            owner_id="user_manager",
+            entity_ids='["d1", "v1", "roi_d1"]',
+            decision_ids='["dec_demo_d1"]',
+            metadata_json='{"demo": true, "territory": "华东"}',
+        ))
+    if ap1:
+        ap1.case_id = "case_demo_d1"
+        ap1.decision_id = "dec_demo_d1"
+    if not db.query(DecisionRecord).filter(DecisionRecord.id == "dec_demo_d1").first():
+        db.add(DecisionRecord(
+            id="dec_demo_d1",
+            category="风险恢复",
+            scenario="张主任近三月处方持续下滑，建议恢复学术拜访并在 24 小时后观察处方趋势。",
+            reasoning="拜访后处方从 120 降至 78；费用 ROI 为 3.0，建议优先恢复覆盖。",
+            outcome="recommended",
+            confidence=0.86,
+            decision_maker="InsightAgent",
+            evidence_ids='["v1", "roi_d1"]',
+            entity_ids='["d1"]',
+            metadata_json='{"demo": true}',
+            case_id="case_demo_d1",
+        ))
+    if not db.query(EffectRecord).filter(EffectRecord.id == "effect_demo_d1").first():
+        db.add(EffectRecord(
+            id="effect_demo_d1",
+            case_id="case_demo_d1",
+            decision_id="dec_demo_d1",
+            action_id="ap1",
+            metric="月处方量",
+            baseline=120,
+            target=100,
+            actual=78,
+            unit="张",
+            status="observing",
+            note="等待拜访动作执行后进入观察窗口。",
+        ))
 
     t1 = db.query(SalesTarget).filter(SalesTarget.id == "t1").first()
     if t1 and t1.achievement_rate is not None and float(t1.achievement_rate) >= 80:

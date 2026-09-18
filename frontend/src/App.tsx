@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage';
 import OnboardingGuide from './components/OnboardingGuide';
 
 const BriefPage = lazy(() => import('./components/BriefPage'));
+const CaseCockpit = lazy(() => import('./components/CaseCockpit'));
 const WatchPage = lazy(() => import('./components/WatchPage'));
 const ApprovePage = lazy(() => import('./components/ApprovePage'));
 const EffectPage = lazy(() => import('./components/EffectPage'));
@@ -55,6 +56,7 @@ function DashboardContent() {
     const content = (() => {
       switch (tab) {
         case 'brief': return <BriefPage onTabChange={goTab} />;
+        case 'cases': return <CaseCockpit />;
         case 'watch': return <WatchPage onTabChange={goTab} />;
         case 'approve': return <ApprovePage />;
         case 'checked': return <CheckedPage onTabChange={goTab} />;

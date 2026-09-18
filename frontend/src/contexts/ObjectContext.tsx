@@ -204,43 +204,35 @@ export function ObjectProvider({ children, userId }: ObjectProviderProps) {
     const object = state.objects.find(o => o.id === objectId);
     if (!object) return;
 
-    dispatch({ type: 'EXECUTE_ACTION', payload: { actionId, objectId, params } });
-
     try {
       const result = await apiClient.executeOntologyAction(object.objectType, objectId, actionId, params, userId);
       if (!result.success) {
-        dispatch({ type: 'EXECUTE_ACTION_ROLLBACK', payload: { actionId } });
+        dispatch({ type: 'SET_ERROR', payload: result.error || '动作提交失败' });
+        return;
       }
+      await refreshData();
     } catch (error) {
-      dispatch({ type: 'EXECUTE_ACTION_ROLLBACK', payload: { actionId } });
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '动作提交失败' });
     }
-  }, [state.objects, userId]);
+  }, [state.objects, userId, refreshData]);
 
   const approveAction = useCallback(async (actionId: string) => {
-    const targetAction = state.actions.find(a => a.id === actionId);
-    const previousStatus = targetAction?.status || 'pending';
-
-    dispatch({ type: 'APPROVE_ACTION', payload: { actionId } });
-
     try {
       await apiClient.approveAction(actionId, userId);
+      await refreshData();
     } catch (error) {
-      dispatch({ type: 'APPROVE_ACTION_ROLLBACK', payload: { actionId, previousStatus } });
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '审批失败' });
     }
-  }, [state.actions, userId]);
+  }, [userId, refreshData]);
 
   const rejectAction = useCallback(async (actionId: string, reason?: string) => {
-    const targetAction = state.actions.find(a => a.id === actionId);
-    const previousStatus = targetAction?.status || 'pending';
-
-    dispatch({ type: 'REJECT_ACTION', payload: { actionId, reason } });
-
     try {
       await apiClient.rejectAction(actionId, userId, reason);
+      await refreshData();
     } catch (error) {
-      dispatch({ type: 'REJECT_ACTION_ROLLBACK', payload: { actionId, previousStatus } });
+      dispatch({ type: 'SET_ERROR', payload: error instanceof Error ? error.message : '拒绝失败' });
     }
-  }, [state.actions, userId]);
+  }, [userId, refreshData]);
 
   const selectObject = useCallback((objectId: string | null) => { dispatch({ type: 'SELECT_OBJECT', payload: { objectId } }); }, []);
   const markNotificationRead = useCallback((notificationId: string) => { dispatch({ type: 'MARK_NOTIFICATION_READ', payload: { notificationId } }); apiClient.markNotificationRead(notificationId).catch(console.error); }, []);

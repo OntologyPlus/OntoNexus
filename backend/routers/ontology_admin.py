@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
-from auth import require_auth
+from auth import require_auth, require_roles
 from models.user import User
 from services.ontology_health import get_ontology_health
 from services.ontology_change_service import (
@@ -38,7 +38,7 @@ def submit_change_request(
 
 
 @router.get("/change-requests")
-def list_change_requests(db: Session = Depends(get_db), user: Optional[User] = Depends(require_auth)):
+def list_change_requests(db: Session = Depends(get_db), user: User = Depends(require_roles("admin", "ontology_admin", "compliance"))):
     return get_pending_change_requests(db)
 
 
@@ -47,7 +47,7 @@ def review_request(
     request_id: str,
     review: dict,
     db: Session = Depends(get_db),
-    user: User = Depends(require_auth),
+    user: User = Depends(require_roles("admin", "ontology_admin", "compliance")),
 ):
     result = review_change_request(
         db, request_id, user.id,
@@ -63,13 +63,13 @@ def review_request(
 def create_version(
     request: dict,
     db: Session = Depends(get_db),
-    user: User = Depends(require_auth),
+    user: User = Depends(require_roles("admin", "ontology_admin")),
 ):
     return create_version_snapshot(db, request.get("description", ""), user.id)
 
 
 @router.get("/versions")
-def list_versions(db: Session = Depends(get_db), user: Optional[User] = Depends(require_auth)):
+def list_versions(db: Session = Depends(get_db), user: User = Depends(require_roles("admin", "ontology_admin", "compliance"))):
     return get_version_history(db)
 
 
@@ -78,6 +78,6 @@ def compare(
     version_id_1: str,
     version_id_2: str,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(require_auth),
+    user: User = Depends(require_roles("admin", "ontology_admin", "compliance")),
 ):
     return compare_versions(db, version_id_1, version_id_2)

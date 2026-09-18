@@ -253,7 +253,7 @@ class ApiClient {
   }
 
   async searchOntologyObjects(objectType: string, query: string): Promise<any[]> {
-    return this.request(`/api/ontology/objects/${objectType}/search?q=${encodeURIComponent(query)}`);
+    return this.request(`/api/ontology/${objectType}/search?q=${encodeURIComponent(query)}`);
   }
 
   async createOntologyObject(objectType: string, data: Record<string, any>): Promise<any> {
@@ -299,6 +299,15 @@ class ApiClient {
 
   async getHubOverview(): Promise<any> {
     return this.request('/api/hub/overview');
+  }
+
+  async getDecisionCases(status?: string): Promise<any[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return this.request(`/api/decisions/cases${query}`);
+  }
+
+  async getCaseTimeline(caseId: string): Promise<any> {
+    return this.request(`/api/decisions/cases/${caseId}/timeline`);
   }
 
   async hubRun(query: string, objectId?: string, decisionId?: string): Promise<any> {
@@ -452,7 +461,9 @@ class ApiClient {
 
   private connectWebSocketInternal(userId: string): WebSocket {
     const wsUrl = this.baseUrl ? this.baseUrl.replace(/^http/, 'ws') : `ws://${window.location.host}`;
-    this.ws = new WebSocket(`${wsUrl}/api/ws/${userId}`);
+    const token = localStorage.getItem('auth_token');
+    const query = token ? `?token=${encodeURIComponent(token)}` : '';
+    this.ws = new WebSocket(`${wsUrl}/api/ws/${userId}${query}`);
 
     this.ws.onopen = () => {
       this.wsReconnectAttempts = 0;

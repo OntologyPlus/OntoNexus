@@ -10,6 +10,7 @@ class DecisionRecord(Base):
         Index("idx_decision_outcome", "outcome"),
         Index("idx_decision_causation", "causation_id"),
         Index("idx_decision_parent", "parent_decision_id"),
+        Index("idx_decision_case", "case_id"),
     )
 
     id = Column(String, primary_key=True)
@@ -26,6 +27,7 @@ class DecisionRecord(Base):
     parent_decision_id = Column(String, nullable=True)
     entity_ids = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)
+    case_id = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

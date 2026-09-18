@@ -14,4 +14,5 @@ class ExecutionLog(Base):
     result = Column(Text, nullable=True)
     plan_id = Column(String, nullable=True)
     user_id = Column(String, nullable=True)
+    case_id = Column(String, nullable=True)
     timestamp = Column(DateTime, server_default=func.now())
