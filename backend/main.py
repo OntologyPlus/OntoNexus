@@ -17,9 +17,9 @@ from fastapi.responses import JSONResponse
 from actions.hard_rules import HardRuleViolation
 from actions.sod import SoDViolation
 
-DEFAULT_ORIGINS = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,tauri://localhost,http://tauri.localhost,http://localhost:1420,http://localhost:1421,http://localhost:1422,http://localhost:1423,http://localhost:1424,http://0.0.0.0:5173"
+DEFAULT_ORIGINS = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,tauri://localhost,http://tauri.localhost,http://localhost:1420,http://localhost:1421,http://localhost:1422,http://localhost:1423,http://localhost:1424,http://0.0.0.0:5173,http://localhost:4173,http://127.0.0.1:4173"
 
-from routers import health, auth, ontology, actions, chat, scenarios, inference, notifications, reminders, agent, reasoning, effects, ws, memory, perception, suggestions, insights, ontology_definition, events, ontology_admin, decisions, audit, eval_router, hub, ingest
+from routers import health, auth, ontology, actions, chat, scenarios, inference, notifications, reminders, agent, reasoning, effects, ws, memory, perception, suggestions, insights, ontology_definition, events, ontology_admin, decisions, audit, eval_router, hub, ingest, oag_compare, cio
 
 def _get_db_session():
     engine = _get_engine()
@@ -159,3 +159,5 @@ app.include_router(audit.router)
 app.include_router(eval_router.router)
 app.include_router(hub.router)
 app.include_router(ingest.router)
+app.include_router(oag_compare.router)
+app.include_router(cio.router)

@@ -7,6 +7,9 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import OnboardingGuide from './components/OnboardingGuide';
 
+const AgentRoom = lazy(() => import('./components/AgentRoom'));
+const CioPage = lazy(() => import('./components/CioPage'));
+const OagCompare = lazy(() => import('./components/OagCompare'));
 const BriefPage = lazy(() => import('./components/BriefPage'));
 const CaseCockpit = lazy(() => import('./components/CaseCockpit'));
 const WatchPage = lazy(() => import('./components/WatchPage'));
@@ -55,6 +58,9 @@ function DashboardContent() {
     const tab = resolveTab(activeTab, user?.role);
     const content = (() => {
       switch (tab) {
+        case 'agent': return <AgentRoom onTabChange={goTab} />;
+        case 'trust': return <CioPage />;
+        case 'compare': return <OagCompare />;
         case 'brief': return <BriefPage onTabChange={goTab} />;
         case 'cases': return <CaseCockpit />;
         case 'watch': return <WatchPage onTabChange={goTab} />;

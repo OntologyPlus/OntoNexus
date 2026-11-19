@@ -100,7 +100,7 @@ async def stream_chat(
 async def oag_chat_endpoint(
     request: dict,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user),
+    user: User = Depends(require_auth),
 ):
     from services.oag_service import oag_chat
     result = await oag_chat(db, request.get("message", ""), user.id if user else "anonymous")
@@ -111,7 +111,7 @@ async def oag_chat_endpoint(
 async def oag_chat_stream_endpoint(
     request: dict,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user),
+    user: User = Depends(require_auth),
 ):
     from services.oag_service import oag_chat_stream
 
@@ -135,7 +135,7 @@ async def oag_chat_stream_endpoint(
 async def oag_analyze_endpoint(
     object_id: str,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user),
+    user: User = Depends(require_auth),
 ):
     from services.oag_service import oag_object_analysis
     result = oag_object_analysis(db, object_id)

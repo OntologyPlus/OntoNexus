@@ -18,23 +18,59 @@ def estimate_tokens(text: str) -> int:
 MAX_CONTEXT_TOKENS = int(os.environ.get("LLM_MAX_CONTEXT_TOKENS", "8000"))
 
 
+def _normalized_base_url() -> Optional[str]:
+    api_url = os.environ.get("LLM_API_URL") or ""
+    if not api_url:
+        return None
+    return api_url.replace("/chat/completions", "") if api_url.endswith("/chat/completions") else api_url
+
+
+def _build_client(model: Optional[str], *, streaming: bool = True, temperature: Optional[float] = None):
+    """Build an OpenAI-compatible chat client with a hard timeout and bounded retries."""
+    kwargs = dict(
+        model=model,
+        model_provider="openai",
+        api_key=os.environ.get("LLM_API_KEY"),
+        temperature=temperature if temperature is not None else float(os.environ.get("LLM_TEMPERATURE", "0.7")),
+        max_tokens=int(os.environ.get("LLM_MAX_TOKENS", "4096")),
+        streaming=streaming,
+        timeout=float(os.environ.get("LLM_TIMEOUT_SECONDS", "30")),
+        max_retries=int(os.environ.get("LLM_MAX_RETRIES", "1")),
+    )
+    base_url = _normalized_base_url()
+    if base_url:
+        kwargs["base_url"] = base_url
+    return init_chat_model(**kwargs)
+
+
 @lru_cache(maxsize=1)
 def get_llm_client():
     if not is_llm_configured():
         return None
+    return _build_client(os.environ.get("LLM_MODEL"), streaming=True)
 
-    api_url = os.environ.get("LLM_API_URL")
-    base_url = api_url.replace("/chat/completions", "") if api_url.endswith("/chat/completions") else api_url
 
-    return init_chat_model(
-        model=os.environ.get("LLM_MODEL"),
-        model_provider="openai",
-        api_key=os.environ.get("LLM_API_KEY"),
-        base_url=base_url,
-        temperature=float(os.environ.get("LLM_TEMPERATURE", "0.7")),
-        max_tokens=int(os.environ.get("LLM_MAX_TOKENS", "4096")),
-        streaming=True,
-    )
+@lru_cache(maxsize=4)
+def get_llm_for(role: str = "main"):
+    """role='main' -> LLM_MODEL (reasoning); role='fast' -> LLM_FAST_MODEL (planning/reflection, falls back to main).
+
+    The fast role runs at low temperature for stable structured output.
+    """
+    if not is_llm_configured():
+        return None
+    if role == "fast":
+        model = os.environ.get("LLM_FAST_MODEL") or os.environ.get("LLM_MODEL")
+        return _build_client(model, streaming=False, temperature=float(os.environ.get("LLM_FAST_TEMPERATURE", "0.1")))
+    return _build_client(os.environ.get("LLM_MODEL"), streaming=True, temperature=float(os.environ.get("LLM_AGENT_TEMPERATURE", "0.3")))
+
+
+def llm_info() -> dict:
+    return {
+        "configured": is_llm_configured(),
+        "model": os.environ.get("LLM_MODEL"),
+        "fast_model": os.environ.get("LLM_FAST_MODEL") or os.environ.get("LLM_MODEL"),
+        "base_url_set": bool(_normalized_base_url()),
+    }
 
 
 def _get_llm():
@@ -99,7 +135,7 @@ async def chat_with_llm_stream_with_thinking(
         async for chunk in llm.astream(full_messages):
             if chunk.content:
                 yield "answer", chunk.content
-            
+
             if hasattr(chunk, 'additional_kwargs') and chunk.additional_kwargs:
                 reasoning = chunk.additional_kwargs.get('reasoning_content')
                 if reasoning:

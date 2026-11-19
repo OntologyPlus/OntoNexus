@@ -54,6 +54,7 @@ def seed_database():
             _seed_agent_status(db)
 
         _ensure_demo_loop(db)
+        _ensure_demo_story(db)
         db.commit()
     except Exception as e:
         db.rollback()
@@ -781,3 +782,68 @@ def _ensure_demo_loop(db):
             note="demo_pending_24h",
             evaluate_after=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=23),
         ))
+
+
+def _ensure_demo_story(db):
+    """Idempotent demo storyline for the executive demo (Agent war room / OAG).
+
+    * d6 周教授: a *hidden* risk. System status is still "normal", but prescriptions have
+      fallen ~27%, visits stopped, and he influences two other doctors. The Agent should
+      find him on its own (this is the "perception" highlight).
+    * Historical, already-scored outcomes so "看效果" is never empty and skill weights
+      visibly move (one up, one up, one down).
+    All names are fictional.
+    """
+    from datetime import date
+    from models.learning import SkillOutcome
+    from decision.learning import record_outcome
+
+    today = date.today()
+
+    if not db.query(OntologyObject).filter(OntologyObject.id == "d6").first():
+        db.add(OntologyObject(
+            id="d6", object_type="Doctor", name="周教授", status="normal",
+            lifecycle_stage="active", sentiment="neutral", compliance_risk_level=None, owner_id="r3",
+        ))
+    if not db.query(Doctor).filter(Doctor.id == "d6").first():
+        db.add(Doctor(
+            id="d6", title="主任医师", department="心内科", specialty="心力衰竭,高血压",
+            prescription_power=90, influence_score=80, prescription_volume=58,
+            last_visit_date=(today - timedelta(days=75)).isoformat(),
+            next_recommended_visit_date=(today - timedelta(days=15)).isoformat(),
+        ))
+
+    _ensure_link(db, "d6", "WORKS_AT", "h2", "上海中山医院", "Hospital")
+    _ensure_link(db, "d6", "MANAGED_BY", "r3", "孙代表", "SalesRep")
+    _ensure_link(db, "d6", "PRESCRIBES", "p1", "诺欣妥", "Product")
+    _ensure_link(db, "d6", "INFLUENCES", "d3", "王主治", "Doctor")
+    _ensure_link(db, "d6", "INFLUENCES", "d4", "陈副主任", "Doctor")
+
+    if not db.query(TimeSeriesData).filter(TimeSeriesData.object_id == "d6").first():
+        months = ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"]
+        for series_name, values in (
+            ("prescriptionVolume", [96, 92, 85, 74, 66, 58]),
+            ("visitFrequency", [4, 3, 2, 1, 0, 0]),
+            ("sentimentScore", [72, 70, 66, 62, 58, 55]),
+        ):
+            for ts, val in zip(months, values):
+                db.add(TimeSeriesData(object_id="d6", series_name=series_name, timestamp=ts, value=val))
+
+    exists = (
+        db.query(SourceBinding)
+        .filter(SourceBinding.source_system == "crm", SourceBinding.external_id == "CRM-D6")
+        .first()
+    )
+    if not exists:
+        db.add(SourceBinding(id="sb_crm_CRM-D6", source_system="crm", external_id="CRM-D6", object_id="d6", object_type="Doctor", last_status="seed"))
+
+    history = (
+        ("demo_hist_1", "recommend-and-accept", "d4", 0.85, "visit_effect_up"),
+        ("demo_hist_2", "recovery_plan_drafter", "d2", 0.75, "coverage_ok"),
+        ("demo_hist_3", "action_operator", "d5", 0.25, "still_at_risk"),
+    )
+    for action_id, skill, object_id, score, note in history:
+        if db.query(SkillOutcome).filter(SkillOutcome.action_id == action_id).first():
+            continue
+        record_outcome(db, skill_name=skill, object_id=object_id, action_id=action_id,
+                       status="scored", effectiveness=score, note=note)

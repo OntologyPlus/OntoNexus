@@ -39,8 +39,12 @@ class ActionGateway:
         causation_id: Optional[str] = None,
         decision_id: Optional[str] = None,
         case_id: Optional[str] = None,
+        reasoning: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        """``reasoning`` (optional) annotates the proposal for approvers:
+        {conclusion, confidence, evidence}. It never affects rule evaluation."""
         params = params or {}
+        reasoning = reasoning or {}
         idempotency_key = params.get("idempotency_key") or _idempotency_key(action_type, object_id, params)
         existing = self.db.query(ActionProposal).filter(ActionProposal.idempotency_key == idempotency_key).first()
         if existing:
@@ -94,6 +98,9 @@ class ActionGateway:
             case_id=case_id or params.get("case_id"),
             causation_id=causation_id,
             risk_level=contract.risk_level,
+            reasoning_conclusion=reasoning.get("conclusion"),
+            reasoning_confidence=reasoning.get("confidence"),
+            reasoning_evidence=reasoning.get("evidence"),
         )
         if not needs_approval:
             proposal.approved_by = "system"

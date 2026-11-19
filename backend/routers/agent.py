@@ -1,142 +1,130 @@
-from typing import Optional, AsyncGenerator
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from database import get_db
-from auth import get_current_user
-from models.user import User
-from models.agent import AgentStatus
+"""Agent endpoints.
 
-from langchain_core.messages import HumanMessage
-import os
+All Agent runs go through ``agents.war_room`` (perceive -> reason -> plan -> act -> reflect).
+World-changing writes only happen via the Action Gateway; there is no second execution path.
+"""
+
 import json
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from agents import war_room
+from auth import identity_from_user, require_auth
+from database import SessionLocal, get_db
+from llm import is_llm_configured, llm_info
+from models.agent import AgentStatus
+from models.user import User
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
 
 class AgentInvokeRequest(BaseModel):
     query: str
 
 
-@router.post("/invoke")
-def invoke_agent(
+def _sse(event: dict) -> str:
+    return "data: " + json.dumps(event, ensure_ascii=False, default=str) + "\n\n"
+
+
+def _event_stream(query: str, user, replay: Optional[str], record: Optional[str]):
+    db = SessionLocal()
+    try:
+        for event in war_room.stream_events(db, query=query, user=user, replay_key=replay, record_key=record):
+            yield _sse(event)
+        yield "data: [DONE]\n\n"
+    except Exception as exc:  # noqa: BLE001 - never leave the client hanging
+        yield _sse({"type": "error", "stage": "stream", "message": str(exc)})
+        yield "data: [DONE]\n\n"
+    finally:
+        db.close()
+
+
+_SSE_HEADERS = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
+
+@router.post("/run/stream")
+def run_stream(
     request: AgentInvokeRequest,
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user),
+    replay: Optional[str] = Query(default=None, description="Replay a previously recorded run (rehearsal safety net)."),
+    record: Optional[str] = Query(default=None, description="Record this live run under a key (admin only)."),
+    user: User = Depends(require_auth),
 ):
-    try:
-        from agents.cognitive_graph import app
-        
-        initial_state = {
-            "messages": [HumanMessage(content=request.query)],
-            "perception_results": "",
-            "hypotheses": "",
-            "current_plan": "",
-            "execution_status": ""
-        }
-        
-        final_state = app.invoke(initial_state)
-        
-        return {
-            "status": "success",
-            "perception": final_state.get("perception_results", ""),
-            "reasoning": final_state.get("hypotheses", ""),
-            "plan": final_state.get("current_plan", ""),
-            "execution": final_state.get("execution_status", "")
-        }
-    except ImportError:
-        raise HTTPException(status_code=500, detail="Agent graph is not initialized properly.")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
-
-
-async def generate_agent_stream(query: str, user_id: Optional[str] = None) -> AsyncGenerator[str, None]:
-    """生成Agent流式响应"""
-    try:
-        from services.chat_service import invoke_agent_stream
-        from agents.cognitive_graph import app
-        from services.ws_manager import manager
-
-        initial_state = {
-            "messages": [HumanMessage(content=query)],
-            "perception_results": "",
-            "hypotheses": "",
-            "current_plan": "",
-            "execution_status": ""
-        }
-
-        step_messages = {
-            "perceive": "正在扫描系统数据...",
-            "reason": "正在进行推理分析...",
-            "plan": "正在制定行动计划...",
-            "execute": "正在执行计划...",
-            "reflect": "正在反思总结...",
-            "human_review": "等待人工审批...",
-        }
-
-        # 发送开始信号
-        yield f"data: {json.dumps({'type': 'start', 'message': 'Agent启动'})}\n\n"
-
-        final_state = None
-        async for event in app.astream(initial_state):
-            for node_name, node_output in event.items():
-                # 发送节点进度
-                progress_data = {
-                    "type": "progress",
-                    "step": node_name,
-                    "detail": step_messages.get(node_name, f"执行节点：{node_name}"),
-                }
-                yield f"data: {json.dumps(progress_data, ensure_ascii=False)}\n\n"
-
-                # 同时发送到WebSocket
-                if user_id:
-                    try:
-                        await manager.send_agent_progress(user_id, node_name, progress_data["detail"])
-                    except:
-                        pass
-                
-                final_state = node_output
-
-        # 发送最终结果
-        if final_state:
-            result_data = {
-                "type": "complete",
-                "perception": final_state.get("perception_results", ""),
-                "reasoning": final_state.get("hypotheses", ""),
-                "plan": final_state.get("current_plan", ""),
-                "execution": final_state.get("execution_status", ""),
-                "needs_review": final_state.get("needs_human_review", False),
-                "pending_action_id": final_state.get("pending_action_id"),
-            }
-            yield f"data: {json.dumps(result_data, ensure_ascii=False)}\n\n"
-
-    except Exception as e:
-        error_data = {"type": "error", "message": str(e)}
-        yield f"data: {json.dumps(error_data)}\n\n"
+    identity = identity_from_user(user)
+    record_key = record if getattr(user, "role", None) == "admin" else None
+    return StreamingResponse(
+        _event_stream(request.query, identity, replay, record_key),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
 
 
 @router.post("/invoke/stream")
-async def invoke_agent_stream(
-    request: AgentInvokeRequest,
-    user: Optional[User] = Depends(get_current_user),
-):
-    """流式调用Agent，通过SSE返回实时进度"""
-    user_id = user.id if user else None
-    return StreamingResponse(
-        generate_agent_stream(request.query, user_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
+def invoke_stream(request: AgentInvokeRequest, user: User = Depends(require_auth)):
+    """Backward-compatible alias of /run/stream."""
+    return run_stream(request, replay=None, record=None, user=user)
+
+
+@router.post("/invoke")
+def invoke_agent(request: AgentInvokeRequest, db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    """Non-streaming variant: runs the same pipeline and returns a compact result."""
+    identity = identity_from_user(user)
+    result = {"status": "success", "perception": [], "reasoning": "", "plan": [], "execution": [], "reflection": ""}
+    for ev in war_room.run(db, query=request.query, user=identity):
+        t = ev.get("type")
+        if t == "perceive.finding":
+            result["perception"].append(ev["finding"])
+        elif t == "reason.done":
+            result["reasoning"] = ev["text"]
+        elif t == "plan.step":
+            result["plan"].append(ev["step"])
+        elif t == "act.result":
+            result["execution"].append(ev)
+        elif t == "reflect.done":
+            result["reflection"] = ev["text"]
+        elif t == "error":
+            result["status"] = "error"
+            result["error"] = ev.get("message")
+        elif t == "done":
+            result["run_id"] = ev.get("run_id")
+            result["decision_id"] = ev.get("decision_id")
+            result["summary"] = ev.get("summary")
+    return result
+
+
+@router.get("/presets")
+def presets(user: User = Depends(require_auth)):
+    return [{**p, "has_replay": war_room.has_replay(p["id"])} for p in war_room.PRESET_QUESTIONS]
+
+
+@router.get("/llm-status")
+def llm_status(ping: bool = False, user: User = Depends(require_auth)):
+    """Lightweight status for the stage indicator. ``ping=true`` makes a real 1-call round trip."""
+    info = llm_info()
+    state = "online" if info["configured"] else "offline"
+    latency_ms = None
+    if ping and info["configured"]:
+        import time
+
+        t0 = time.time()
+        try:
+            from langchain_core.messages import HumanMessage
+
+            from llm import get_llm_for
+
+            get_llm_for("fast").invoke([HumanMessage(content="ping")])
+            latency_ms = int((time.time() - t0) * 1000)
+        except Exception as exc:  # noqa: BLE001
+            state = "degraded"
+            info["error"] = str(exc)[:200]
+    return {**info, "state": state, "latency_ms": latency_ms}
+
 
 @router.get("/status")
-def get_agent_status(
-    db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_current_user),
-):
+def get_agent_status(db: Session = Depends(get_db), user: User = Depends(require_auth)):
     agents = db.query(AgentStatus).all()
     results = []
     for a in agents:
@@ -165,3 +153,9 @@ def get_agent_status(
             },
         })
     return results
+
+
+@router.post("/sod-demo")
+def sod_demo(db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    """'试一试：自己批自己' — proves the submitter cannot be the approver (HR-003)."""
+    return war_room.sod_demo(db, identity_from_user(user))

@@ -282,14 +282,83 @@ def _build_definition_context(object_type: str) -> Dict[str, Any]:
     }
 
 
+_TYPE_HINTS = {
+    "医生": ["Doctor"], "主任": ["Doctor"], "教授": ["Doctor"], "专家": ["Doctor"], "处方": ["Doctor"],
+    "医院": ["Hospital"], "产品": ["Product"], "代表": ["SalesRep"],
+    "达成": ["SalesTarget"], "目标": ["SalesTarget"], "业绩": ["SalesTarget", "SalesRep"],
+    "合规": ["ComplianceAlert", "ComplianceRule"], "费用": ["ExpenseROI", "ComplianceAlert"],
+    "区域": ["Territory"], "拜访": ["VisitRecord", "Doctor"],
+}
+_MAX_RELEVANT = 12
+
+
+def _longest_common_substring_len(a: str, b: str, cap: int = 12) -> int:
+    """Length of the longest common substring (small strings only)."""
+    if not a or not b:
+        return 0
+    best = 0
+    for i in range(len(a)):
+        for j in range(len(b)):
+            k = 0
+            while i + k < len(a) and j + k < len(b) and a[i + k] == b[j + k]:
+                k += 1
+                if k >= cap:
+                    return k
+            best = max(best, k)
+    return best
+
+
 def _find_relevant_objects(db: Session, query: str, object_types: Optional[List[str]] = None) -> List[OntologyObject]:
+    """Entity-link a natural-language query to ontology objects.
+
+    Order of evidence: (1) object name contains the whole query (legacy behaviour),
+    (2) object name appears in the query, or shares a >=3 char fragment with it
+    (e.g. "瑞金医院" -> "上海瑞金医院"), (3) type hints in the query (医生/医院/产品…),
+    preferring warning/critical objects, (4) fallback: risky objects first.
+    """
     q = db.query(OntologyObject)
     if object_types:
         q = q.filter(OntologyObject.object_type.in_(object_types))
 
-    objects = q.filter(OntologyObject.name.contains(query)).limit(10).all()
+    text = (query or "").strip()
+    found: List[OntologyObject] = []
+    seen = set()
 
-    if not objects:
-        objects = q.limit(10).all()
+    def add(rows):
+        for obj in rows:
+            if obj.id not in seen:
+                seen.add(obj.id)
+                found.append(obj)
 
-    return objects
+    if text:
+        add(q.filter(OntologyObject.name.contains(text)).limit(10).all())
+        scored = []
+        for obj in q.limit(2000).all():
+            name = obj.name or ""
+            if len(name) < 2:
+                continue
+            if name in text:
+                scored.append((100 + len(name), obj))
+            else:
+                overlap = _longest_common_substring_len(name, text)
+                if overlap >= 3:
+                    scored.append((overlap, obj))
+        scored.sort(key=lambda pair: -pair[0])
+        add([obj for _, obj in scored[:6]])
+
+        hinted_types: List[str] = []
+        for keyword, types in _TYPE_HINTS.items():
+            if keyword in text:
+                for t in types:
+                    if t not in hinted_types:
+                        hinted_types.append(t)
+        if hinted_types:
+            risky_first = q.filter(OntologyObject.object_type.in_(hinted_types)).order_by(
+                OntologyObject.status.in_(["warning", "critical"]).desc()
+            )
+            add(risky_first.limit(6).all())
+
+    if not found:
+        add(q.order_by(OntologyObject.status.in_(["warning", "critical"]).desc()).limit(10).all())
+
+    return found[:_MAX_RELEVANT]

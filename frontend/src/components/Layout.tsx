@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState, useEffect, useMemo } from 'react';
-import { Settings, Bell, Network, X, CheckCircle, AlertTriangle, Info, Lightbulb, MessageSquare, LogOut, HelpCircle, ChevronDown, ChevronRight, Sparkles, Brain, Target, Inbox, Clock, FileText, ClipboardList, BadgeCheck, Shield, PenLine } from 'lucide-react';
+import { Settings, Bell, Network, X, CheckCircle, AlertTriangle, Info, Lightbulb, MessageSquare, LogOut, HelpCircle, ChevronDown, ChevronRight, Sparkles, Brain, Target, Inbox, Clock, FileText, ClipboardList, BadgeCheck, Shield, PenLine, Bot, Scale } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOntologyContext } from '../contexts/OntologyContext';
@@ -85,6 +85,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, onNav
       id: 'decide',
       label: COPY.nav.groups.decide,
       children: [
+        { tab: 'agent', label: 'AI 作战室', icon: <Bot size={16} /> },
+        { tab: 'compare', label: 'OAG 对比', icon: <Scale size={16} /> },
         { tab: 'brief', label: COPY.nav.brief, icon: <FileText size={16} /> },
         { tab: 'cases', label: '案件驾驶舱', icon: <ClipboardList size={16} /> },
         { tab: 'watch', label: COPY.nav.watch, icon: <AlertTriangle size={16} /> },
@@ -115,6 +117,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, onNav
       label: COPY.nav.groups.graph,
       children: [
         { tab: 'ontology', label: COPY.nav.graph, icon: <Network size={16} /> },
+        { tab: 'trust', label: '治理与可信', icon: <Shield size={16} /> },
       ],
     },
   ], []);
