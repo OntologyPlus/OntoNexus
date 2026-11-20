@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+.venv/
+venv/
+alembic/versions/__pycache__/
+.DS_Store
